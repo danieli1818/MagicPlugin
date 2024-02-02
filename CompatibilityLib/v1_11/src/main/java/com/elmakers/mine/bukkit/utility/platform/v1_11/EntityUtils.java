@@ -10,6 +10,7 @@ import com.elmakers.mine.bukkit.utility.platform.Platform;
 import com.elmakers.mine.bukkit.utility.platform.v1_11.entity.EntityHorseData;
 import com.elmakers.mine.bukkit.utility.platform.v1_11.entity.EntityLlamaData;
 import com.elmakers.mine.bukkit.utility.platform.v1_11.entity.EntityMuleData;
+import com.elmakers.mine.bukkit.utility.platform.v1_11.entity.EntityOcelotData;
 import com.elmakers.mine.bukkit.utility.platform.v1_11.entity.EntityZombieVillagerData;
 
 public class EntityUtils extends com.elmakers.mine.bukkit.utility.platform.legacy.EntityUtils  {
@@ -20,6 +21,8 @@ public class EntityUtils extends com.elmakers.mine.bukkit.utility.platform.legac
     @Override
     public EntityExtraData getExtraData(MageController controller, Entity entity) {
         switch (entity.getType()) {
+            case OCELOT:
+                return new EntityOcelotData(entity);
             case HORSE:
                 return new EntityHorseData(entity, controller);
             case LLAMA:
@@ -36,6 +39,8 @@ public class EntityUtils extends com.elmakers.mine.bukkit.utility.platform.legac
     @Override
     public EntityExtraData getExtraData(MageController controller, EntityType type, ConfigurationSection parameters) {
         switch (type) {
+            case OCELOT:
+                return new EntityOcelotData(parameters, controller);
             case HORSE:
                 return new EntityHorseData(parameters, controller);
             case MULE:
