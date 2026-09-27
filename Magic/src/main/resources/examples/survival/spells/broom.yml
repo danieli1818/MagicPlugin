@@ -110,6 +110,15 @@ broom:
         armor_stand_marker: false
         dismount_height: 8
 
+        # Hitbox tuning
+        # armor_stand_scale sets the SCALE attribute of the armor stand: it shrinks the vanilla
+        # collision box, lowers the rider and shrinks the broom model together, so compensate with
+        # display.head scale/translation in the resource pack model.
+        # armor_stand_scale: 0.5
+        # Crash checks: offset from the rider (x = forward, y = up, z = right) and box size (x,y,z).
+        # hitbox_offset: 0,0,0
+        # hitbox_size: 0.6,0.4,0.6
+
         # Upgrades with level
         steer_speed: 0.03
 
