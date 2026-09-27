@@ -4,6 +4,8 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.bukkit.Material;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
@@ -35,6 +37,7 @@ public class MountArmorStandAction extends RideEntityAction
     private double armorStandPitch = 0;
     private double armorStandRoll = 0;
     private double armorStandHealth = 0;
+    private double armorStandScale = 1;
     private ItemStack helmetItem;
     private CreatureSpawnEvent.SpawnReason armorStandSpawnReason = CreatureSpawnEvent.SpawnReason.CUSTOM;
 
@@ -70,6 +73,7 @@ public class MountArmorStandAction extends RideEntityAction
         armorStandPitch = parameters.getDouble("armor_stand_pitch", 0.0);
         armorStandRoll = parameters.getDouble("armor_stand_roll", 0.0);
         armorStandHealth = parameters.getDouble("armor_stand_health", 0.1);
+        armorStandScale = parameters.getDouble("armor_stand_scale", 1.0);
         mountWand = parameters.getBoolean("mount_wand", false);
         findWand = parameters.getBoolean("find_wand", false);
         mountName = parameters.getString("mount_name", null);
@@ -222,6 +226,14 @@ public class MountArmorStandAction extends RideEntityAction
         }
         controller.setForceSpawn(false);
 
+        // Scales the collision box, the rider's seat height and the rendered helmet together
+        if (armorStandScale != 1) {
+            AttributeInstance scaleAttribute = armorStand.getAttribute(Attribute.SCALE);
+            if (scaleAttribute != null) {
+                scaleAttribute.setBaseValue(armorStandScale);
+            }
+        }
+
         EntityEquipment equipment = armorStand.getEquipment();
         if (equipment != null) {
             if (mountWand) {
@@ -277,6 +289,7 @@ public class MountArmorStandAction extends RideEntityAction
         parameters.add("armor_stand_gravity");
         parameters.add("armor_stand_reason");
         parameters.add("armor_stand_pitch");
+        parameters.add("armor_stand_scale");
         parameters.add("mount_wand");
         parameters.add("mount_target");
         parameters.add("replacement_item");
@@ -296,6 +309,8 @@ public class MountArmorStandAction extends RideEntityAction
             examples.addAll(Arrays.asList(BaseSpell.EXAMPLE_BOOLEANS));
         } else if (parameterKey.equals("armor_stand_pitch")) {
             examples.addAll(Arrays.asList(BaseSpell.EXAMPLE_VECTOR_COMPONENTS));
+        } else if (parameterKey.equals("armor_stand_scale")) {
+            examples.addAll(Arrays.asList(BaseSpell.EXAMPLE_SIZES));
         } else if (parameterKey.equals("armor_stand_reason")) {
             for (CreatureSpawnEvent.SpawnReason reason : CreatureSpawnEvent.SpawnReason.values()) {
                 examples.add(reason.name().toLowerCase());
