@@ -6,6 +6,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.ConfigurationSection;
@@ -14,6 +15,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
+import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 
 import com.elmakers.mine.bukkit.action.BaseSpellAction;
@@ -100,6 +102,8 @@ public class RideEntityAction extends BaseSpellAction
     private double crashBraking = 0;
     private double crashEntityFOV = 0;
     private int fallProtection = 0;
+    private Vector hitboxOffset;
+    private Vector hitboxSize;
     private boolean isPassenger;
     private Spell jumpSpell;
     private String[] jumpSpellParameters;
@@ -198,6 +202,14 @@ public class RideEntityAction extends BaseSpellAction
         fallProtection = parameters.getInt("fall_protection", 0);
         exemptionDuration = parameters.getInt("exemption_duration", 0);
         boostAttribute = parameters.getString("boost_attribute");
+        hitboxOffset = ConfigurationUtils.getVector(parameters, "hitbox_offset");
+        if (hitboxOffset != null && hitboxOffset.lengthSquared() == 0) {
+            hitboxOffset = null;
+        }
+        hitboxSize = ConfigurationUtils.getVector(parameters, "hitbox_size");
+        if (hitboxSize != null && hitboxSize.getX() <= 0 && hitboxSize.getY() <= 0 && hitboxSize.getZ() <= 0) {
+            hitboxSize = null;
+        }
         if (parameters.contains("direction_y")) {
             yDirection = parameters.getDouble("direction_y");
         } else {
@@ -286,16 +298,17 @@ public class RideEntityAction extends BaseSpellAction
         // Check for crashing
         long now = System.currentTimeMillis();
         if (crashCooldown == 0 || now > lastCrash + crashCooldown) {
+            Location hitboxLocation = getHitboxLocation(mounted);
             if (crashDistance > 0 && Math.abs(speed) >= crashSpeed && now > liftoffTime + liftoffDuration)
             {
                 Vector threshold = direction.clone().multiply(speed * crashDistance);
-                if (checkForCrash(context, mounted.getLocation(), threshold)) {
+                if (checkForCrash(context, hitboxLocation.clone(), threshold)) {
                     if (crash(context)) {
                         return SpellResult.CAST;
                     }
                 }
             }
-            if (!context.isPassthrough(mounted.getLocation().getBlock())) {
+            if (isObstructed(context, hitboxLocation)) {
                 if (crash(context)) {
                     return SpellResult.CAST;
                 }
@@ -713,6 +726,9 @@ public class RideEntityAction extends BaseSpellAction
         if (maxAscend > 0) {
             source.setY(source.getY() + maxAscend);
         }
+        if (hitboxSize != null) {
+            return isObstructed(context, source.add(threshold));
+        }
         Block facingBlock = source.getBlock();
         Block targetBlock = source.add(threshold).getBlock();
 
@@ -720,6 +736,59 @@ public class RideEntityAction extends BaseSpellAction
             return true;
         }
 
+        return false;
+    }
+
+    /**
+     * The point crash checks are made from: the rider's location plus hitbox_offset,
+     * where the offset is x = forward, y = up, z = right relative to the flight direction.
+     */
+    protected Location getHitboxLocation(Entity mounted) {
+        Location location = mounted.getLocation();
+        if (hitboxOffset != null && direction != null) {
+            Location heading = location.clone();
+            heading.setDirection(direction);
+            location.add(VectorUtils.rotateVector(hitboxOffset.clone(), heading.getYaw(), 0));
+        }
+        return location;
+    }
+
+    /**
+     * Without a hitbox_size this checks the single block at the location, as before.
+     * With one, it checks the actual collision shapes of every non-passthrough block
+     * touched by a box of that size, centered horizontally on the location and rising up from it.
+     */
+    protected boolean isObstructed(CastContext context, Location location) {
+        if (hitboxSize == null) {
+            return !context.isPassthrough(location.getBlock());
+        }
+        World world = location.getWorld();
+        if (world == null) {
+            return false;
+        }
+        double halfWidth = hitboxSize.getX() / 2;
+        double halfDepth = hitboxSize.getZ() / 2;
+        BoundingBox hitbox = new BoundingBox(
+                location.getX() - halfWidth, location.getY(), location.getZ() - halfDepth,
+                location.getX() + halfWidth, location.getY() + hitboxSize.getY(), location.getZ() + halfDepth);
+        int minX = (int)Math.floor(hitbox.getMinX());
+        int minY = (int)Math.floor(hitbox.getMinY());
+        int minZ = (int)Math.floor(hitbox.getMinZ());
+        int maxX = (int)Math.floor(hitbox.getMaxX());
+        int maxY = (int)Math.floor(hitbox.getMaxY());
+        int maxZ = (int)Math.floor(hitbox.getMaxZ());
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    Block block = world.getBlockAt(x, y, z);
+                    if (context.isPassthrough(block)) continue;
+                    // Collision shapes are relative to the block's corner
+                    if (block.getCollisionShape().overlaps(hitbox.clone().shift(-x, -y, -z))) {
+                        return true;
+                    }
+                }
+            }
+        }
         return false;
     }
 
@@ -757,6 +826,8 @@ public class RideEntityAction extends BaseSpellAction
         parameters.add("air_controllable");
         parameters.add("height_check_radius");
         parameters.add("mount_no_drops");
+        parameters.add("hitbox_offset");
+        parameters.add("hitbox_size");
     }
 
     @Override
