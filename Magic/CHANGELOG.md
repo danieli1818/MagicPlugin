@@ -14,6 +14,13 @@
    - Add a `magic` profile and associated skill, can be disabled via config
    - Add an OpenValhallaSkillTreeAction, used in the spellshop by the `valhalla` example
    - Add a resource pack combining Valhalla and Magic resources
+ - Add `armor_stand_scale` parameter to MountArmorStand, to scale a broom's collision box (and model)
+ - Add `hitbox_offset` and `hitbox_size` parameters to RideEntity/MountArmorStand crash checks
+   - With a `hitbox_size`, mounts can slide along the ground, and only crash into it when diving
+     more steeply than `crash_ground_angle`
+   - Add `hitbox_debug` to outline the crash hitboxes with particles
+ - Add `mount_display` options to MountArmorStand, to show the mount item on a display entity riding the
+   player, so it can stay full size and be positioned independently of a scaled armor stand
 
 # 10.11
 
