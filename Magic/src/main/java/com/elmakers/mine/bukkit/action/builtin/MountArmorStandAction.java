@@ -228,7 +228,7 @@ public class MountArmorStandAction extends RideEntityAction
 
         // Scales the collision box, the rider's seat height and the rendered helmet together
         if (armorStandScale != 1) {
-            AttributeInstance scaleAttribute = armorStand.getAttribute(Attribute.SCALE);
+            AttributeInstance scaleAttribute = armorStand.getAttribute(Attribute.GENERIC_SCALE);
             if (scaleAttribute != null) {
                 scaleAttribute.setBaseValue(armorStandScale);
             }
