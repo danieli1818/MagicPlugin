@@ -102,8 +102,10 @@ public class RideEntityAction extends BaseSpellAction
     private double crashBraking = 0;
     private double crashEntityFOV = 0;
     private int fallProtection = 0;
+    private static final double GROUND_EPSILON = 0.001;
     private Vector hitboxOffset;
     private Vector hitboxSize;
+    private double crashGroundAngle;
     private boolean isPassenger;
     private Spell jumpSpell;
     private String[] jumpSpellParameters;
@@ -210,6 +212,7 @@ public class RideEntityAction extends BaseSpellAction
         if (hitboxSize != null && hitboxSize.getX() <= 0 && hitboxSize.getY() <= 0 && hitboxSize.getZ() <= 0) {
             hitboxSize = null;
         }
+        crashGroundAngle = parameters.getDouble("crash_ground_angle", 20);
         if (parameters.contains("direction_y")) {
             yDirection = parameters.getDouble("direction_y");
         } else {
@@ -298,10 +301,16 @@ public class RideEntityAction extends BaseSpellAction
         // Check for crashing
         long now = System.currentTimeMillis();
         if (crashCooldown == 0 || now > lastCrash + crashCooldown) {
-            Location hitboxLocation = getHitboxLocation(mounted);
-            if (crashDistance > 0 && Math.abs(speed) >= crashSpeed && now > liftoffTime + liftoffDuration)
+            Location hitboxLocation = getHitboxLocation(context, mounted);
+            boolean canCrash = Math.abs(speed) >= crashSpeed && now > liftoffTime + liftoffDuration;
+            if (crashDistance > 0 && canCrash)
             {
                 Vector threshold = direction.clone().multiply(speed * crashDistance);
+                if (hitboxSize != null && threshold.getY() < 0) {
+                    // The ground is handled by the ground check below, so looking ahead
+                    // only watches for walls and ceilings and the mount can slide along the floor
+                    threshold.setY(0);
+                }
                 if (checkForCrash(context, hitboxLocation.clone(), threshold)) {
                     if (crash(context)) {
                         return SpellResult.CAST;
@@ -309,6 +318,11 @@ public class RideEntityAction extends BaseSpellAction
                 }
             }
             if (isObstructed(context, hitboxLocation)) {
+                if (crash(context)) {
+                    return SpellResult.CAST;
+                }
+            }
+            if (hitboxSize != null && canCrash && isDivingIntoGround(context)) {
                 if (crash(context)) {
                     return SpellResult.CAST;
                 }
@@ -740,11 +754,14 @@ public class RideEntityAction extends BaseSpellAction
     }
 
     /**
-     * The point crash checks are made from: the rider's location plus hitbox_offset,
-     * where the offset is x = forward, y = up, z = right relative to the flight direction.
+     * Where the crash checks are made from, plus hitbox_offset, where the offset is
+     * x = forward, y = up, z = right relative to the flight direction.
+     * Without a hitbox_size this is the rider's location, as before. With one it is the feet of the
+     * entity actually being moved (e.g. the armor stand), which rest exactly on the ground at any scale.
      */
-    protected Location getHitboxLocation(Entity mounted) {
-        Location location = mounted.getLocation();
+    protected Location getHitboxLocation(CastContext context, Entity mounted) {
+        Entity anchor = hitboxSize == null ? null : getMount(context);
+        Location location = anchor == null ? mounted.getLocation() : anchor.getLocation();
         if (hitboxOffset != null && direction != null) {
             Location heading = location.clone();
             heading.setDirection(direction);
@@ -768,8 +785,9 @@ public class RideEntityAction extends BaseSpellAction
         }
         double halfWidth = hitboxSize.getX() / 2;
         double halfDepth = hitboxSize.getZ() / 2;
+        // Lifted a hair so resting exactly on top of a block does not count as being inside it
         BoundingBox hitbox = new BoundingBox(
-                location.getX() - halfWidth, location.getY(), location.getZ() - halfDepth,
+                location.getX() - halfWidth, location.getY() + GROUND_EPSILON, location.getZ() - halfDepth,
                 location.getX() + halfWidth, location.getY() + hitboxSize.getY(), location.getZ() + halfDepth);
         int minX = (int)Math.floor(hitbox.getMinX());
         int minY = (int)Math.floor(hitbox.getMinY());
@@ -790,6 +808,19 @@ public class RideEntityAction extends BaseSpellAction
             }
         }
         return false;
+    }
+
+    /**
+     * True when the mount is touching the ground while the rider is steering down into it
+     * more steeply than crash_ground_angle. Flying level or gently downward just slides.
+     */
+    protected boolean isDivingIntoGround(CastContext context) {
+        Entity moving = getMount(context);
+        if (moving == null || !moving.isOnGround()) {
+            return false;
+        }
+        double verticalDirection = speed < 0 ? -direction.getY() : direction.getY();
+        return verticalDirection < -Math.sin(Math.toRadians(crashGroundAngle));
     }
 
     @Override
@@ -828,6 +859,7 @@ public class RideEntityAction extends BaseSpellAction
         parameters.add("mount_no_drops");
         parameters.add("hitbox_offset");
         parameters.add("hitbox_size");
+        parameters.add("crash_ground_angle");
     }
 
     @Override
