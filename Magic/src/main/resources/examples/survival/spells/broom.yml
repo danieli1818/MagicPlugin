@@ -115,9 +115,12 @@ broom:
         # collision box, lowers the rider and shrinks the broom model together, so compensate with
         # display.head scale/translation in the resource pack model.
         # armor_stand_scale: 0.5
-        # Crash checks: offset from the rider (x = forward, y = up, z = right) and box size (x,y,z).
-        # hitbox_offset: 0,0,0
+        # Crash checks: box size (x,y,z). When set, the box starts at the armor stand's feet, moved by
+        # hitbox_offset (x = forward, y = up, z = right). Sliding along the floor is allowed; touching
+        # the ground only crashes when aiming down more steeply than crash_ground_angle (degrees).
         # hitbox_size: 0.6,0.4,0.6
+        # hitbox_offset: 0,0,0
+        # crash_ground_angle: 20
 
         # Upgrades with level
         steer_speed: 0.03
