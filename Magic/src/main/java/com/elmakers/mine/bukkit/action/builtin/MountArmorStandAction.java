@@ -37,7 +37,6 @@ import de.slikey.effectlib.util.VectorUtils;
 
 public class MountArmorStandAction extends RideEntityAction
 {
-    private static final double ARMOR_STAND_HEIGHT = 1.975;
     // Skip transformation updates smaller than this (radians), to save packets
     private static final double DISPLAY_UPDATE_THRESHOLD = Math.toRadians(0.5);
 
@@ -45,6 +44,7 @@ public class MountArmorStandAction extends RideEntityAction
     private double mountDisplayScale = 1;
     private Vector mountDisplayOffset;
     private int mountDisplayInterpolation;
+    private int mountDisplayTeleportDuration;
     private double mountDisplayYawOffset;
     private ItemDisplay.ItemDisplayTransform mountDisplayTransform = ItemDisplay.ItemDisplayTransform.HEAD;
     private ItemDisplay display;
@@ -110,6 +110,8 @@ public class MountArmorStandAction extends RideEntityAction
             mountDisplayOffset = new Vector();
         }
         mountDisplayInterpolation = parameters.getInt("mount_display_interpolation", 2);
+        // Matches the client's movement smoothing for the armor stand, so the broom keeps pace with it
+        mountDisplayTeleportDuration = parameters.getInt("mount_display_teleport_duration", 3);
         mountDisplayYawOffset = parameters.getDouble("mount_display_yaw_offset", 0);
         mountDisplayTransform = ItemDisplay.ItemDisplayTransform.HEAD;
         String transformName = parameters.getString("mount_display_transform");
@@ -184,23 +186,60 @@ public class MountArmorStandAction extends RideEntityAction
         }
     }
 
+    @Override
+    public SpellResult perform(CastContext context) {
+        SpellResult result = super.perform(context);
+        if (mountDisplay && result == SpellResult.PENDING) {
+            updateMountDisplayPosition(context);
+        }
+        return result;
+    }
+
     /**
-     * Keeps the item display riding the current mount, spawning it if needed, and
-     * points it along the flight direction. All rotation goes through the display's
-     * transformation, which the client interpolates, rather than teleporting it.
+     * Spawns the item display if it is missing. Returns true if it was just created.
+     */
+    private boolean ensureMountDisplay(CastContext context) {
+        if (display != null && display.isValid()) {
+            return false;
+        }
+        removeMountDisplay();
+        display = spawnMountDisplay(context);
+        return display != null;
+    }
+
+    /**
+     * Moves the display to where the mount will be once this tick's velocity is applied.
+     * Spell ticks run before entities move, so using the current location would leave the
+     * display a tick behind. The client smooths the move over mount_display_teleport_duration.
+     */
+    private void updateMountDisplayPosition(CastContext context) {
+        if (mount == null || !mount.isValid()) {
+            return;
+        }
+        ensureMountDisplay(context);
+        if (display == null) {
+            return;
+        }
+        Location target = mount.getLocation().add(mount.getVelocity());
+        target.setYaw(0);
+        target.setPitch(0);
+        if (target.getWorld() != display.getWorld() || target.distanceSquared(display.getLocation()) > 0.0001) {
+            display.setTeleportDuration(mountDisplayTeleportDuration);
+            display.teleport(target);
+        }
+    }
+
+    /**
+     * Points the display along the flight direction. All rotation goes through the display's
+     * transformation, which the client interpolates, rather than through its own yaw.
      */
     private void updateMountDisplay(CastContext context, float yawDegrees, double pitch, double roll) {
         if (mount == null || !mount.isValid()) {
             return;
         }
-        boolean created = false;
-        if (display == null || !display.isValid() || !mount.equals(display.getVehicle())) {
-            removeMountDisplay();
-            display = spawnMountDisplay(context);
-            if (display == null) {
-                return;
-            }
-            created = true;
+        boolean created = ensureMountDisplay(context);
+        if (display == null) {
+            return;
         }
 
         float yaw = (float)Math.toRadians(yawDegrees + mountDisplayYawOffset);
@@ -214,11 +253,9 @@ public class MountArmorStandAction extends RideEntityAction
         lastDisplayPitch = (float)pitch;
         lastDisplayRoll = (float)roll;
 
-        // Passengers sit at the top of the stand, so shift down by the seat height to make
-        // mount_display_offset relative to the stand's feet
-        double seatHeight = armorStandMarker ? 0 : ARMOR_STAND_HEIGHT * (armorStandSmall ? 0.5 : 1) * armorStandScale;
+        // The display sits at the stand's feet, so the offset applies directly
         Vector offset = VectorUtils.rotateVector(mountDisplayOffset.clone(), yawDegrees, 0);
-        Vector3f translation = new Vector3f((float)offset.getX(), (float)(offset.getY() - seatHeight), (float)offset.getZ());
+        Vector3f translation = new Vector3f((float)offset.getX(), (float)offset.getY(), (float)offset.getZ());
         Quaternionf rotation = new Quaternionf().rotateY(-yaw).rotateX((float)pitch).rotateZ((float)roll);
         float scale = (float)mountDisplayScale;
         Transformation transformation = new Transformation(translation, rotation, new Vector3f(scale, scale, scale), new Quaternionf());
@@ -252,8 +289,6 @@ public class MountArmorStandAction extends RideEntityAction
         } finally {
             controller.setForceSpawn(false);
         }
-        // Added after the rider, so the rider stays the first passenger
-        mount.addPassenger(spawned);
         return spawned;
     }
 
@@ -428,6 +463,7 @@ public class MountArmorStandAction extends RideEntityAction
         parameters.add("mount_display_scale");
         parameters.add("mount_display_offset");
         parameters.add("mount_display_interpolation");
+        parameters.add("mount_display_teleport_duration");
         parameters.add("mount_display_yaw_offset");
         parameters.add("mount_display_transform");
     }
