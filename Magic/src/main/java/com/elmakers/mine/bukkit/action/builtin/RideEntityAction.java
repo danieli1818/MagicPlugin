@@ -5,7 +5,9 @@ import java.util.Collection;
 import java.util.List;
 import javax.annotation.Nullable;
 
+import org.bukkit.Color;
 import org.bukkit.Location;
+import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -103,9 +105,12 @@ public class RideEntityAction extends BaseSpellAction
     private double crashEntityFOV = 0;
     private int fallProtection = 0;
     private static final double GROUND_EPSILON = 0.001;
+    // Distance between particles when outlining a hitbox with hitbox_debug
+    private static final double HITBOX_DEBUG_SPACING = 0.1;
     private Vector hitboxOffset;
     private Vector hitboxSize;
     private double crashGroundAngle;
+    private boolean hitboxDebug;
     private boolean isPassenger;
     private Spell jumpSpell;
     private String[] jumpSpellParameters;
@@ -213,6 +218,7 @@ public class RideEntityAction extends BaseSpellAction
             hitboxSize = null;
         }
         crashGroundAngle = parameters.getDouble("crash_ground_angle", 20);
+        hitboxDebug = parameters.getBoolean("hitbox_debug", false);
         if (parameters.contains("direction_y")) {
             yDirection = parameters.getDouble("direction_y");
         } else {
@@ -303,14 +309,25 @@ public class RideEntityAction extends BaseSpellAction
         if (crashCooldown == 0 || now > lastCrash + crashCooldown) {
             Location hitboxLocation = getHitboxLocation(context, mounted);
             boolean canCrash = Math.abs(speed) >= crashSpeed && now > liftoffTime + liftoffDuration;
+            Vector threshold = direction.clone().multiply(speed * crashDistance);
+            if (hitboxSize != null && threshold.getY() < 0) {
+                // The ground is handled by the ground check below, so looking ahead
+                // only watches for walls and ceilings and the mount can slide along the floor
+                threshold.setY(0);
+            }
+            if (hitboxDebug && hitboxSize != null && mounted instanceof Player) {
+                Player viewer = (Player)mounted;
+                drawHitbox(viewer, hitboxLocation.getWorld(), getHitbox(hitboxLocation), Color.LIME);
+                if (crashDistance > 0) {
+                    Location ahead = hitboxLocation.clone();
+                    if (maxAscend > 0) {
+                        ahead.setY(ahead.getY() + maxAscend);
+                    }
+                    drawHitbox(viewer, ahead.getWorld(), getHitbox(ahead.add(threshold)), canCrash ? Color.YELLOW : Color.GRAY);
+                }
+            }
             if (crashDistance > 0 && canCrash)
             {
-                Vector threshold = direction.clone().multiply(speed * crashDistance);
-                if (hitboxSize != null && threshold.getY() < 0) {
-                    // The ground is handled by the ground check below, so looking ahead
-                    // only watches for walls and ceilings and the mount can slide along the floor
-                    threshold.setY(0);
-                }
                 if (checkForCrash(context, hitboxLocation.clone(), threshold)) {
                     if (crash(context)) {
                         return SpellResult.CAST;
@@ -783,12 +800,7 @@ public class RideEntityAction extends BaseSpellAction
         if (world == null) {
             return false;
         }
-        double halfWidth = hitboxSize.getX() / 2;
-        double halfDepth = hitboxSize.getZ() / 2;
-        // Lifted a hair so resting exactly on top of a block does not count as being inside it
-        BoundingBox hitbox = new BoundingBox(
-                location.getX() - halfWidth, location.getY() + GROUND_EPSILON, location.getZ() - halfDepth,
-                location.getX() + halfWidth, location.getY() + hitboxSize.getY(), location.getZ() + halfDepth);
+        BoundingBox hitbox = getHitbox(location);
         int minX = (int)Math.floor(hitbox.getMinX());
         int minY = (int)Math.floor(hitbox.getMinY());
         int minZ = (int)Math.floor(hitbox.getMinZ());
@@ -808,6 +820,54 @@ public class RideEntityAction extends BaseSpellAction
             }
         }
         return false;
+    }
+
+    /**
+     * The crash box for a location: hitbox_size, centered horizontally and rising up from it.
+     */
+    protected BoundingBox getHitbox(Location location) {
+        double halfWidth = hitboxSize.getX() / 2;
+        double halfDepth = hitboxSize.getZ() / 2;
+        // Lifted a hair so resting exactly on top of a block does not count as being inside it
+        return new BoundingBox(
+                location.getX() - halfWidth, location.getY() + GROUND_EPSILON, location.getZ() - halfDepth,
+                location.getX() + halfWidth, location.getY() + hitboxSize.getY(), location.getZ() + halfDepth);
+    }
+
+    /**
+     * Outlines a crash box with dust particles, visible only to the given player.
+     */
+    protected void drawHitbox(Player viewer, World world, BoundingBox box, Color color) {
+        Particle.DustOptions dust = new Particle.DustOptions(color, 0.4f);
+        double[] xs = {box.getMinX(), box.getMaxX()};
+        double[] ys = {box.getMinY(), box.getMaxY()};
+        double[] zs = {box.getMinZ(), box.getMaxZ()};
+        for (double y : ys) {
+            for (double z : zs) {
+                drawHitboxEdge(viewer, world, dust, xs[0], y, z, xs[1], y, z);
+            }
+        }
+        for (double x : xs) {
+            for (double z : zs) {
+                drawHitboxEdge(viewer, world, dust, x, ys[0], z, x, ys[1], z);
+            }
+        }
+        for (double x : xs) {
+            for (double y : ys) {
+                drawHitboxEdge(viewer, world, dust, x, y, zs[0], x, y, zs[1]);
+            }
+        }
+    }
+
+    private void drawHitboxEdge(Player viewer, World world, Particle.DustOptions dust,
+                                double x1, double y1, double z1, double x2, double y2, double z2) {
+        double length = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1) + (z2 - z1) * (z2 - z1));
+        int steps = Math.max(1, (int)Math.ceil(length / HITBOX_DEBUG_SPACING));
+        for (int i = 0; i <= steps; i++) {
+            double t = (double)i / steps;
+            Location point = new Location(world, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, z1 + (z2 - z1) * t);
+            viewer.spawnParticle(Particle.DUST, point, 1, 0, 0, 0, 0, dust);
+        }
     }
 
     /**
@@ -859,6 +919,7 @@ public class RideEntityAction extends BaseSpellAction
         parameters.add("mount_no_drops");
         parameters.add("hitbox_offset");
         parameters.add("hitbox_size");
+        parameters.add("hitbox_debug");
         parameters.add("crash_ground_angle");
     }
 
