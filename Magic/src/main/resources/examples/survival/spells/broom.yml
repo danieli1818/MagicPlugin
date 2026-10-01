@@ -127,7 +127,6 @@ broom:
         # mount_display_scale: 1
         # mount_display_offset: 0,0,0       # from the stand's feet: x = forward, y = up, z = right
         # mount_display_interpolation: 2    # ticks of client-side rotation smoothing, 0 = instant
-        # mount_display_teleport_duration: 3  # ticks of client-side movement smoothing, to keep pace with the stand
         # mount_display_yaw_offset: 0       # degrees, if the broom points the wrong way
 
         # Upgrades with level
