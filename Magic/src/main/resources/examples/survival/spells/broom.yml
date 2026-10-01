@@ -121,6 +121,9 @@ broom:
         # hitbox_size: 0.6,0.4,0.6
         # hitbox_offset: 0,0,0
         # crash_ground_angle: 20
+        # Outline the crash boxes with particles while riding (only the rider sees them):
+        # green = current box, yellow = look-ahead box (gray while crashes are not active yet)
+        # hitbox_debug: true
         # Draw the broom on an item display riding the armor stand instead of as its helmet,
         # so it stays full size at any armor_stand_scale (uses the model's "head" display settings).
         # mount_display: true
